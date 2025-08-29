@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Kalkulator Infus & Dosis Obat (Lengkap)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 16px; }
+    .container { max-width: 800px; margin: 0 auto; }
+    h2 { text-align: center; }
+    label { display:block; margin-top:8px; font-weight:600; }
+    input[type="text"], input[type="number"], select, button {
+      width:100%; padding:10px; margin-top:6px; box-sizing:border-box; font-size:15px;
+    }
+    button { background:#007bff; color:#fff; border:none; border-radius:6px; cursor:pointer; }
+    button:hover { background:#0056b3; }
+    #hasil { margin-top:18px; padding:12px; border:1px solid #ddd; border-radius:6px; background:#fafafa; white-space:pre-wrap; }
+    .small { font-size:13px; color:#555; }
+    .flex { display:flex; gap:8px; }
+    .flex > * { flex:1; }
+    @media (max-width:520px){ .flex{flex-direction:column} }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Kalkulator Infus & Dosis Obat (Lengkap)</h2>
+
+    <label>Nama pasien</label>
+    <input type="text" id="nama" placeholder="Nama pasien">
+
+    <div class="flex">
+      <div>
+        <label>Usia (tahun)</label>
+        <input type="number" id="usia" placeholder="Usia (tahun)" oninput="rekomendasiCairan()">
+        <div id="rekomendasi" class="small"></div>
+      </div>
+
+      <div>
+        <label>Berat badan (kg)</label>
+        <input type="number" id="bb" step="0.1" placeholder="Berat badan (kg)">
+      </div>
+    </div>
+
+    <label>Jenis cairan infus</label>
+    <select id="cairan">
+      <option value="Ringer Laktat (RL)">Ringer Laktat (RL)</option>
+      <option value="NaCl 0,9%">NaCl 0,9%</option>
+      <option value="D5% (Glukosa 5%)">D5% (Glukosa 5%)</option>
+      <option value="D10% (Glukosa 10%)">D10% (Glukosa 10%)</option>
+      <option value="Asetat Ringer">Asetat Ringer</option>
+      <option value="Cairan lain">Cairan lain</option>
+    </select>
+
+    <div class="flex">
+      <div>
+        <label>Faktor tetes</label>
+        <select id="faktor">
+          <option value="20">Makrodrip (20 gtt/ml)</option>
+          <option value="60">Mikrodrip (60 gtt/ml)</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Durasi infus (jam)</label>
+        <input type="number" id="durasi" value="24" placeholder="Durasi infus (jam)">
+      </div>
+    </div>
+
+    <label>Obat (pilih untuk lihat dosis otomatis)</label>
+    <select id="obat" onchange="updateRute()">
+      <option value="Ranitidin">Ranitidin</option>
+      <option value="Ondansetron">Ondansetron</option>
+      <option value="Omeprazole">Omeprazole</option>
+      <option value="Paracetamol">Paracetamol</option>
+      <option value="Ceftriaxone">Ceftriaxone</option>
+      <option value="Ampicillin">Ampicillin</option>
+      <option value="Ketorolac">Ketorolac</option>
+      <option value="Adrenalin">Adrenalin (Epinephrine)</option>
+      <option value="Diazepam">Diazepam</option>
+      <option value="Furosemid">Furosemid</option>
+      <option value="Dexamethasone">Dexamethasone</option>
+      <option value="Salbutamol (Nebulasi)">Salbutamol (Nebulasi)</option>
+    </select>
+
+    <label>Rute pemberian (pilih jika lebih dari 1 opsi)</label>
+    <select id="rute"></select>
+
+    <div style="margin-top:12px;">
+      <button onclick="hitungInfusObat()">Hitung & Tampilkan Rencana</button>
+    </div>
+
+    <div id="hasil"></div>
+    <div class="small" style="margin-top:10px;">
+      Catatan: dosis yang disajikan adalah pedoman umum. Selalu sesuaikan dengan kondisi klinis pasien, fungsi ginjal, liver, dan panduan rumah sakit.
+    </div>
+  </div>
+
+  <script>
+    // Database obat lengkap: info, rute (array), dan fungsi hitung(bb)
+    const obatDB = {
+      "Ranitidin": {
+        info: "2–4 mg/kg/hari IV dibagi 2 dosis, max 300 mg/hari",
+        route: ["IV"],
+        hitung: function(bb){
+          // menggunakan 2 mg/kg per dosis (2x sehari) sebagai contoh hitung
+          let dosis = bb * 2;
+          if (dosis > 150) dosis = 150;
+          return { text: dosis.toFixed(1) + " mg per dosis (2x/hari)", note: "Max 300 mg/hari" };
+        }
+      },
+      "Ondansetron": {
+        info: "0.15 mg/kg IV tiap 8 jam, max 16 mg/hari",
+        route: ["IV"],
+        hitung: function(bb){
+          let dosis = bb * 0.15;
+          if (dosis > 8) dosis = 8;
+          return { text: dosis.toFixed(2) + " mg per dosis (q8h)", note: "Max 16 mg/hari" };
+        }
+      },
+      "Omeprazole": {
+        info: "0.7–1 mg/kg/hari PO, max 40 mg/hari",
+        route: ["PO"],
+        hitung: function(bb){
+          let dosis = bb * 1;
+          if (dosis > 40) dosis = 40;
+          return { text: dosis.toFixed(1) + " mg per hari (PO)", note: "Max 40 mg/hari" };
+        }
+      },
+      "Paracetamol": {
+        info: "10–15 mg/kg per dosis PO/IV q6h, max 60 mg/kg/hari atau 4 g/hari",
+        route: ["PO", "IV"],
+        hitung: function(bb){
+          let dosis = bb * 15;
+          if (dosis > 1000) dosis = 1000; // batas dosis per dosis
+          return { text: dosis.toFixed(0) + " mg per dosis (q6h)", note: "Max 4 g/hari atau 60 mg/kg/hari" };
+        }
+      },
+      "Ceftriaxone": {
+        info: "50–75 mg/kg/hari IV/IM, max 2 g/hari",
+        route: ["IV", "IM"],
+        hitung: function(bb){
+          let dosis = bb * 50;
+          if (dosis > 2000) dosis = 2000;
+          return { text: dosis.toFixed(0) + " mg per hari", note: "Max 2 g/hari" };
+        }
+      },
+      "Ampicillin": {
+        info: "50–100 mg/kg/hari IV dibagi 4 dosis, max 12 g/hari",
+        route: ["IV"],
+        hitung: function(bb){
+          // contoh tampilan per dosis (mengambil 25 mg/kg per dosis, q6h)
+          let dosis = bb * 25;
+          if (dosis > 3000) dosis = 3000;
+          return { text: dosis.toFixed(0) + " mg per dosis (q6h)", note: "Max 12 g/hari" };
+        }
+      },
+      "Ketorolac": {
+        info: "Anak: 0.5 mg/kg/dosis IV/IM q6h (max 30 mg/dosis, 90 mg/hari). Dewasa: 30 mg IV/IM q6h (max 120 mg/hari).",
+        route: ["IV","IM"],
+        hitung: function(bb){
+          let dosis = bb * 0.5;
+          if (dosis > 30) dosis = 30;
+          return { text: dosis.toFixed(1) + " mg per dosis (q6h)", note: "Max 30 mg/dosis (anak), Dewasa: 30 mg/dosis" };
+        }
+      },
+      // Obat emergensi
+      "Adrenalin": {
+        info: "0.01 mg/kg IV/IM (1:10000) untuk resusitasi; max 1 mg per dosis",
+        route: ["IV","IM","SC"],
+        hitung: function(bb){
+          let dosis = bb * 0.01;
+          if (dosis > 1) dosis = 1;
+          return { text: dosis.toFixed(2) + " mg per dosis", note: "Max 1 mg/dosis" };
+        }
+      },
+      "Diazepam": {
+        info: "0.2–0.5 mg/kg IV/rectal, max 10 mg/dosis",
+        route: ["IV","Rectal"],
+        hitung: function(bb){
+          let dosis = bb * 0.3; // contoh tengah rentang
+          if (dosis > 10) dosis = 10;
+          return { text: dosis.toFixed(1) + " mg per dosis", note: "Max 10 mg/dosis" };
+        }
+      },
+      "Furosemid": {
+        info: "1 mg/kg IV slow, max 40 mg/dosis",
+        route: ["IV"],
+        hitung: function(bb){
+          let dosis = bb * 1;
+          if (dosis > 40) dosis = 40;
+          return { text: dosis.toFixed(1) + " mg IV slow", note: "Max 40 mg/dosis" };
+        }
+      },
+      "Dexamethasone": {
+        info: "0.15–0.6 mg/kg IV/IM, max 16 mg/hari",
+        route: ["IV","IM"],
+        hitung: function(bb){
+          let dosis = bb * 0.3;
+          if (dosis > 16) dosis = 16;
+          return { text: dosis.toFixed(1) + " mg per dosis", note: "Max 16 mg/hari" };
+        }
+      },
+      "Salbutamol (Nebulasi)": {
+        info: "0.15 mg/kg/dosis nebulisasi (min 2.5 mg, max 5 mg)",
+        route: ["Nebulasi"],
+        hitung: function(bb){
+          let dosis = bb * 0.15;
+          if (dosis < 2.5) dosis = 2.5;
+          if (dosis > 5) dosis = 5;
+          return { text: dosis.toFixed(2) + " mg per nebulisasi", note: "Min 2.5 mg, Max 5 mg" };
+        }
+      }
+    };
+
+    // populate rute sesuai obat terpilih
+    function updateRute() {
+      let obat = document.getElementById("obat").value;
+      let ruteSelect = document.getElementById("rute");
+      ruteSelect.innerHTML = "";
+      let routes = obatDB[obat].route;
+      routes.forEach(r => {
+        let opt = document.createElement("option");
+        opt.value = r;
+        opt.text = r;
+        ruteSelect.add(opt);
+      });
+    }
+
+    function rekomendasiCairan() {
+      let usiaVal = document.getElementById("usia").value;
+      let usia = parseFloat(usiaVal);
+      let text = "";
+      if (!usiaVal) { text = ""; }
+      else if (usia < 1) text = "Rekomendasi: D5% + elektrolit sesuai kebutuhan bayi (perhatikan gula dan elektrolit).";
+      else if (usia <= 12) text = "Rekomendasi: Ringer Laktat atau NaCl 0,9% (anak).";
+      else if (usia <= 60) text = "Rekomendasi: Ringer Laktat atau NaCl 0,9%; sesuaikan kondisi klinis.";
+      else text = "Rekomendasi: NaCl 0,9% / cairan hati-hati (geriatri); monitor fungsi ginjal.";
+      document.getElementById("rekomendasi").innerText = text;
+    }
+
+    function hitungInfusObat() {
+      // Ambil input
+      const nama = document.getElementById("nama").value || "-";
+      const usia = document.getElementById("usia").value || "-";
+      const bbRaw = document.getElementById("bb").value;
+      const bb = parseFloat(bbRaw) || 0;
+      const faktor = parseInt(document.getElementById("faktor").value) || 20;
+      const durasi = parseFloat(document.getElementById("durasi").value) || 24;
+      const cairan = document.getElementById("cairan").value;
+      const obatKey = document.getElementById("obat").value;
+      const rute = document.getElementById("rute").value || (obatDB[obatKey].route[0] || "-");
+
+      // Hitung kebutuhan cairan (Holliday-Segar)
+      let volume = 0;
+      if (bb <= 10) volume = bb * 100;
+      else if (bb <= 20) volume = 1000 + (bb - 10) * 50;
+      else volume = 1500 + (bb - 20) * 20;
+
+      // Tetes per menit
+      let tetesPerMenit = 0;
+      if (durasi > 0) tetesPerMenit = (volume * faktor) / (durasi * 60);
+
+      // Obat
+      let obatObj = obatDB[obatKey];
+      let obatHit = obatObj.hitung(bb);
+      let obatInfo = obatObj.info;
+
+      // Susun hasil
+      let hasilText = "";
+      hasilText += "=== Identitas Pasien ===\n";
+      hasilText += "Nama        : " + nama + "\n";
+      hasilText += "Usia        : " + usia + " tahun\n";
+      hasilText += "Berat badan : " + bb + " kg\n\n";
+
+      hasilText += "=== Rencana Infus ===\n";
+      hasilText += "Cairan      : " + cairan + "\n";
+      hasilText += "Volume (24h): " + volume.toFixed(0) + " ml / 24 jam\n";
+      hasilText += "Durasi infus: " + durasi + " jam\n";
+      hasilText += "Faktor tetes : " + faktor + " gtt/ml\n";
+      hasilText += "Tetes/menit : " + tetesPerMenit.toFixed(1) + " gtt/menit\n\n";
+
+      hasilText += "=== Obat / Terapi ===\n";
+      hasilText += "Obat        : " + obatKey + "  (" + rute + ")\n";
+      hasilText += "Aturan umum : " + obatInfo + "\n";
+      hasilText += "Perhitungan : " + obatHit.text + (obatHit.note ? "  ["+obatHit.note+"]" : "") + "\n\n";
+
+      hasilText += "Catatan: Ini pedoman otomatis. Periksa kontraindikasi, alergi, fungsi ginjal/hepar, dan kebijakan RS sebelum pemberian.\n";
+
+      document.getElementById("hasil").innerText = hasilText;
+    }
+
+    // Inisialisasi rute saat load
+    updateRute();
+  </script>
+</body>
+</html>
